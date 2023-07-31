@@ -1,5 +1,7 @@
 package main
 
+//go:generate swag init
+
 import (
 	"fmt"
 	"log"
@@ -9,7 +11,11 @@ import (
 	"tasktracker/model"
 
 	"github.com/labstack/echo/v4"
+
+	echoSwagger "github.com/swaggo/echo-swagger"
 )
+
+var tasks []model.Task
 
 func getTasksHandler(c echo.Context) error {
 	tasks := taskController.GetTasks()
@@ -22,6 +28,7 @@ func addTaskHandler(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
 	}
+	tasks = append(tasks, task)
 
 	taskController.AddTask(task.Judul, task.Deskripsi, task.Prioritas, task.TanggalTenggat)
 	return c.JSON(http.StatusCreated, map[string]string{"message": "Tugas baru berhasil ditambahkan."})
@@ -40,6 +47,40 @@ func deleteTaskHandler(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"message": "Task successfully deleted"})
+}
+
+func updateTaskHandler(c echo.Context) error {
+	taskID := c.Param("id")
+	id, err := strconv.Atoi(taskID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid task ID"})
+	}
+
+	var updatedTask model.Task
+	err = c.Bind(&updatedTask)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": "Invalid request body"})
+	}
+
+	var existingTask *model.Task
+	for i, task := range tasks {
+		if task.ID == id {
+			existingTask = &tasks[i]
+			break
+		}
+	}
+
+	if existingTask == nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"message": "Task not found"})
+	}
+
+	// Update tugas dengan data yang baru
+	existingTask.Judul = updatedTask.Judul
+	existingTask.Deskripsi = updatedTask.Deskripsi
+	existingTask.Prioritas = updatedTask.Prioritas
+	existingTask.TanggalTenggat = updatedTask.TanggalTenggat
+
+	return c.JSON(http.StatusOK, map[string]string{"message": "Task updated successfully"})
 }
 
 var taskController *controller.TaskController
@@ -61,6 +102,12 @@ func main() {
 
 	// Endpoint untuk menghapus tugas berdasarkan ID
 	e.DELETE("/tasks/:id", deleteTaskHandler)
+
+	// Endpoint untuk mendapatkan dokumentasi Swagger
+	e.GET("/swagger/*", echoSwagger.WrapHandler)
+
+	// Endpoint untuk mengedit tugas berdasarkan ID
+	e.PUT("/tasks/:id", updateTaskHandler)
 
 	port := 8080
 	fmt.Printf("Server berjalan di http://localhost:%d\n", port)
